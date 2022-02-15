@@ -1,5 +1,4 @@
 #include <GL/glew.h>
-
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
@@ -7,7 +6,7 @@
 #include <cassert>
 
 /* XPM */
-static char *icon_xpm[] = {
+static char* icon_xpm[] = {
     "32 23 3 1",
     "     c #FFFFFF",
     ".    c #000000",
@@ -40,7 +39,7 @@ static char *icon_xpm[] = {
 struct Texture
 {
     uint         w, h, id;
-    SDL_Surface *surface;
+    SDL_Surface* surface;
 
     Texture ()
     {
@@ -48,12 +47,12 @@ struct Texture
         surface    = nullptr;
     }
 
-    Texture (char **xpm)
+    Texture (char** xpm)
     {
         init (xpm);
     }
 
-    void init (char **xpm)
+    void init (char** xpm)
     {
         surface = IMG_ReadXPMFromArray (xpm);
 
@@ -150,7 +149,7 @@ template <class T> struct List
 
 template <class T> struct Array
 {
-    T     *data;
+    T*     data;
     size_t length, size;
 
     Array ()
@@ -182,7 +181,7 @@ template <class T> struct Array
         }
         else if (length >= size)
         {
-            T *new_data = new T[size *= 2];
+            T* new_data = new T[size *= 2];
 
             for (size_t i = 0; i < length; i++)
                 new_data[i] = data[i];
@@ -200,7 +199,7 @@ template <class T> struct Array
         data[length++] = value;
     }
 
-    T &operator[] (size_t index)
+    T& operator[] (size_t index)
     {
         return (index >= length) ? data[length - 1] : data[index];
     }
@@ -214,7 +213,7 @@ template <class T> struct Tree
         int   weight;
         Node *left, *right;
 
-        Node (T data, Node *left = nullptr, Node *right = nullptr)
+        Node (T data, Node* left = nullptr, Node* right = nullptr)
         {
             this->data  = data;
             this->left  = left;
@@ -222,7 +221,7 @@ template <class T> struct Tree
         }
     };
 
-    Node *root;
+    Node* root;
 
     Tree ()
     {
@@ -241,7 +240,7 @@ template <class T> struct Tree
         push (args...);
     }
 
-    Node *push (T data, Node *leaf)
+    Node* push (T data, Node* leaf)
     {
         if (!leaf)
             return new Node (data);
@@ -266,7 +265,7 @@ template <class T> struct Tree
     }
 };
 
-void print (Tree<int>::Node *node)
+void print (Tree<int>::Node* node)
 {
     if (!node)
         return;
@@ -279,20 +278,26 @@ void print (Tree<int>::Node *node)
 
 struct string : public Array<char>
 {
-    char *c_str_data;
+    char* c_str_data;
 
     string ()
     {
         c_str_data = nullptr;
     }
 
-    string (const char *str)
+    string (const char* str)
     {
         for (int i = 0; str[i] != '\0'; i++)
             push (str[i]);
     }
 
-    char *c_str ()
+    string (size_t size)
+    {
+        this->size = size;
+        data       = new char[size];
+    }
+
+    char* c_str ()
     {
         if (c_str_data != nullptr)
             free (c_str_data);
@@ -346,20 +351,32 @@ struct string : public Array<char>
     }
 };
 
-struct Shader
+string read_file (const char* filename)
 {
-    void compile (const char *code, GLuint type)
-    {
-    }
+    FILE* fp = fopen (filename, "r");
 
-    void init (const char *vs_code, const char *fs_code)
-    {
-    }
-};
+    assert (fp != nullptr);
+
+    fseek (fp, 0, SEEK_END);
+    size_t size = ftell (fp);
+
+    fseek (fp, 0, SEEK_SET);
+
+    string str (size);
+
+    char c = '0';
+
+    while ((c = fgetc (fp)) != EOF)
+        str.push (c);
+
+    fclose (fp);
+
+    return str;
+}
 
 namespace shader
 {
-    uint compile (const char *code, uint type)
+    uint compile (const char* code, uint type)
     {
         sint shader = glCreateShader (type), is_compiled = 0;
 
@@ -382,6 +399,27 @@ namespace shader
 
         return shader;
     }
+
+    uint program (const char* vs_file, const char* fs_file)
+    {
+        uint vertex = compile (read_file (vs_file).c_str (), GL_VERTEX_SHADER);
+        uint fragment
+            = compile (read_file (fs_file).c_str (), GL_FRAGMENT_SHADER);
+
+        uint shader = glCreateProgram ();
+
+        glAttachShader (shader, vertex);
+        glAttachShader (shader, fragment);
+
+        glLinkProgram (shader);
+
+        uint is_linked;
+        glGetProgramiv (shader, GL_LINK_STATUS, (int*)&is_linked);
+
+        assert (is_linked != false);
+
+        return shader;
+    }
 }
 
 struct Vec2
@@ -389,14 +427,9 @@ struct Vec2
     float  data[2];
     float &x = data[0], &y = data[1];
 
-    float &operator[] (int index)
+    float& operator[] (int index)
     {
-        switch (index)
-        {
-            case 0: return x;
-            case 1: return y;
-            default: return x;
-        }
+        return data[index];
     }
 };
 
@@ -407,6 +440,10 @@ struct Vec4
 
     Vec4 ()
     {
+        for (int i = 0; i < 4; i++)
+        {
+            data[i] = 0;
+        }
     }
 
     Vec4 (float x, float y, float z, float w)
@@ -417,7 +454,7 @@ struct Vec4
         data[3] = w;
     }
 
-    float &operator[] (uint index)
+    float& operator[] (uint index)
     {
         assert (index < 4);
 
@@ -452,7 +489,7 @@ struct Mat4
         data[3][3] = d.w;
     }
 
-    float *operator[] (uint i)
+    float* operator[] (uint i)
     {
         assert (i < 4);
 
@@ -470,18 +507,18 @@ Mat4 identity ()
     };
 }
 
-int main (int argc, char **argv)
+int main (int argc, char** argv)
 {
     SDL_Init (SDL_INIT_EVERYTHING);
     TTF_Init ();
 
-    TTF_Font *font = TTF_OpenFont (
+    TTF_Font* font = TTF_OpenFont (
         "/usr/share/fonts/liberation/LiberationMono-Regular.ttf", 12);
 
     if (!font)
         printf ("font: %s\n", SDL_GetError ());
 
-    SDL_Window *window
+    SDL_Window* window
         = SDL_CreateWindow ("shipcade", 0, 0, 1280, 720, SDL_WINDOW_OPENGL);
 
     bool      run = true;
@@ -512,6 +549,8 @@ int main (int argc, char **argv)
 
     lul[0] = 5;
     lul[0] = 1;
+
+    uint program = shader::program ("vertex.glsl", "fragment.glsl");
 
     while (run)
     {

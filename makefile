@@ -12,4 +12,4 @@ PKG_CONFIG=$(CROSS)pkg-config
 SDL2_CONFIG=$(CROSS)sdl2-config
 
 all : main.cc
-	$(CC) -Wall -Wno-write-strings -std=c++11 `$(SDL2_CONFIG) --cflags` `$(PKG_CONFIG) --cflags glew` `$(PKG_CONFIG) --cflags SDL2_image` `$(PKG_CONFIG) --cflags SDL2_mixer` `$(PKG_CONFIG) --cflags SDL2_ttf` main.cc `$(SDL2_CONFIG) --libs` `$(PKG_CONFIG) --libs SDL2_image` `$(PKG_CONFIG) --libs SDL2_mixer` `$(PKG_CONFIG) --libs glew` `$(PKG_CONFIG) --libs SDL2_ttf` -o shipacade.exe
+	$(CC) -Wall -Wno-write-strings -std=c++11 `$(SDL2_CONFIG) --cflags` `$(PKG_CONFIG) --cflags glew` `$(PKG_CONFIG) --cflags SDL2_image` `$(PKG_CONFIG) --cflags SDL2_mixer` `$(PKG_CONFIG) --cflags SDL2_ttf` main.cc `$(SDL2_CONFIG) --libs` `$(PKG_CONFIG) --libs SDL2_image` `$(PKG_CONFIG) --libs SDL2_mixer` `$(PKG_CONFIG) --libs glew` `$(PKG_CONFIG) --libs SDL2_ttf` -o treevi.exe
