@@ -36,6 +36,228 @@ static char* icon_xpm[] = {
     "                                ",
 };
 
+template <int size, class VecN> struct Vec
+{
+    float data[size];
+
+    Vec ()
+    {
+        for (int i = 0; i < size; i++) data[i] = 0;
+    }
+
+    float& operator[] (int index)
+    {
+        assert (index < size);
+        return data[index];
+    }
+
+    VecN operator+ (VecN a)
+    {
+        VecN result;
+
+        for (int i = 0; i < size; i++) result[i] = (data[i] + a[i]);
+
+        return result;
+    }
+
+    VecN operator* (float scalar)
+    {
+        VecN result;
+
+        for (int i = 0; i < size; i++) result[i] = (data[i] * scalar);
+
+        return result;
+    }
+};
+
+struct Vec2 : public Vec<2, Vec2>
+{
+    float &x = data[0], &y = data[1];
+
+    Vec2 () { }
+
+    Vec2 (float x, float y)
+    {
+        data[0] = x;
+        data[1] = y;
+    }
+};
+
+struct Vec3 : public Vec<3, Vec3>
+{
+    float &x = data[0], &y = data[1], &z = data[2];
+
+    Vec3 () { }
+
+    Vec3 (float x, float y, float z)
+    {
+        data[0] = x;
+        data[1] = y;
+        data[2] = z;
+    }
+};
+
+struct Vec4 : public Vec<4, Vec4>
+{
+    float &x = data[0], &y = data[1], &z = data[2], &w = data[3];
+
+    Vec4 ()
+    {
+        for (int i = 0; i < 4; i++) data[i] = 0;
+    }
+
+    Vec4 (float x, float y, float z, float w)
+    {
+        data[0] = x;
+        data[1] = y;
+        data[2] = z;
+        data[3] = w;
+    }
+};
+
+struct Mat4
+{
+    float data[4][4];
+
+    Mat4 ()
+    {
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++) data[i][j] = 0;
+    }
+
+    Mat4 (Vec4 a, Vec4 b, Vec4 c, Vec4 d)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            data[0][i] = a[i];
+            data[1][i] = b[i];
+            data[2][i] = c[i];
+            data[3][i] = d[i];
+        }
+    }
+
+    float* operator[] (uint i)
+    {
+        assert (i < 4);
+
+        return data[i];
+    }
+};
+
+Mat4 identity ()
+{
+    return {
+        { 1, 0, 0, 0 },
+        { 0, 1, 0, 0 },
+        { 0, 0, 1, 0 },
+        { 0, 0, 0, 1 },
+    };
+}
+
+inline Mat4 ortho (float W, float H)
+{
+    float r = W, t = 0;
+    float l = 0, b = H;
+    float f = 1, n = -1;
+
+    Mat4 matrix = identity ();
+
+    matrix[0][0] = 2.f / (r - l);
+    matrix[0][3] = -(r + l) / (r - l);
+
+    matrix[1][1] = 2.f / (t - b);
+    matrix[1][3] = -(t + b) / (t - b);
+
+    matrix[2][2] = -2.f / (f - n);
+    matrix[2][3] = -(f + n) / (f - n);
+
+    return matrix;
+}
+
+inline Mat4 mul (Mat4 m1, Mat4 m2)
+{
+    Mat4 result;
+
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            float val = 0;
+
+            for (int k = 0; k < 4; k++) { val += (m1[i][k] * m2[k][j]); }
+
+            result[i][j] = val;
+        }
+    }
+
+    return result;
+}
+
+inline void translate (Mat4& matrix, Vec2 pos)
+{
+    Mat4 trans_matrix = identity ();
+
+    // {1, 0, 0, pos.x}
+    // {0, 1, 0, pos.y}
+    // {0, 0, 1, 0    }
+    // {0, 0, 0, 1    }
+
+    trans_matrix[0][3] = pos.x;
+    trans_matrix[1][3] = pos.y;
+
+    matrix = mul (matrix, trans_matrix);
+}
+
+inline void scale (Mat4& matrix, Vec2 size)
+{
+    Mat4 scale_matrix = identity ();
+
+    // {size.x, 0,      0, 0}
+    // {0,      size.y, 0, 0}
+    // {0,      0,      1, 0}
+    // {0,      0,      0, 1}
+
+    scale_matrix[0][0] = size.x;
+    scale_matrix[1][1] = size.y;
+
+    matrix = mul (matrix, scale_matrix);
+}
+
+inline void rotate (Mat4& matrix, float angle)
+{
+    // {size.x, 0,      0, 0}
+    // {0,      size.y, 0, 0}
+    // {0,      0,      1, 0}
+    // {0,      0,      0, 1}
+
+    angle = angle * (3.1415f / 180.f);
+
+    Mat4 rotation_matrix = identity ();
+
+    rotation_matrix[0][0] = cos (angle);
+    rotation_matrix[0][1] = (-sin (angle));
+
+    rotation_matrix[1][0] = sin (angle);
+    rotation_matrix[1][1] = cos (angle);
+
+    matrix = mul (matrix, rotation_matrix);
+}
+
+inline Mat4 get_model (Vec2 pos, Vec2 size, float angle = 0)
+{
+    Mat4 matrix = identity ();
+
+    translate (matrix, pos);
+    translate (matrix, size * (0.5f));
+
+    rotate (matrix, angle);
+    translate (matrix, size * (-0.5f));
+
+    scale (matrix, size);
+
+    return matrix;
+}
+
 struct Texture
 {
     uint         w, h, id;
@@ -47,10 +269,7 @@ struct Texture
         surface    = nullptr;
     }
 
-    Texture (char** xpm)
-    {
-        init (xpm);
-    }
+    Texture (char** xpm) { init (xpm); }
 
     void init (char** xpm)
     {
@@ -63,8 +282,7 @@ struct Texture
         int mode            = GL_RGB;
         int internal_format = GL_SRGB_ALPHA;
 
-        if (surface->format->BytesPerPixel == 4)
-            mode = GL_RGBA;
+        if (surface->format->BytesPerPixel == 4) mode = GL_RGBA;
 
         glGenTextures (1, &id);
         glBindTexture (GL_TEXTURE_2D, id);
@@ -92,15 +310,9 @@ template <class K, class V> class kv
     K key;
     V val;
 
-    inline bool operator< (kv<K, V> b)
-    {
-        return (val < b.val) ? true : false;
-    }
+    inline bool operator< (kv<K, V> b) { return (val < b.val) ? true : false; }
 
-    inline bool operator> (kv<K, V> b)
-    {
-        return b < (*this);
-    }
+    inline bool operator> (kv<K, V> b) { return b < (*this); }
 
     inline bool operator== (kv<K, V> b)
     {
@@ -124,21 +336,14 @@ template <class T> struct List
 
     Node *first, *last;
 
-    List ()
-    {
-        first = last = nullptr;
-    }
+    List () { first = last = nullptr; }
 
     void push (T data)
     {
         Node curr = new Node (data);
 
-        if (!first)
-        {
-            first = curr;
-        }
-        else
-        {
+        if (!first) { first = curr; }
+        else {
             last->next = curr;
             curr->prev = last;
         }
@@ -179,12 +384,10 @@ template <class T> struct Array
             data = new T[1];
             size = 1;
         }
-        else if (length >= size)
-        {
+        else if (length >= size) {
             T* new_data = new T[size *= 2];
 
-            for (size_t i = 0; i < length; i++)
-                new_data[i] = data[i];
+            for (size_t i = 0; i < length; i++) new_data[i] = data[i];
 
             delete data;
 
@@ -223,10 +426,7 @@ template <class T> struct Tree
 
     Node* root;
 
-    Tree ()
-    {
-        root = nullptr;
-    }
+    Tree () { root = nullptr; }
 
     template <class... Args> Tree (T val, Args... args)
     {
@@ -242,33 +442,36 @@ template <class T> struct Tree
 
     Node* push (T data, Node* leaf)
     {
-        if (!leaf)
-            return new Node (data);
+        if (!leaf) return new Node (data);
 
-        if (data < leaf->data)
-            leaf->left = push (data, leaf->left);
-        else
-            leaf->right = push (data, leaf->right);
+        if (data < leaf->data) leaf->left = push (data, leaf->left);
+        else leaf->right = push (data, leaf->right);
 
         return leaf;
     }
 
-    void push (T data)
-    {
-        root = push (data, root);
-    }
+    void push (T data) { root = push (data, root); }
 
     void push (Array<T> data)
     {
-        for (size_t i = 0; i < data.length; i++)
-            push (data[i]);
+        for (size_t i = 0; i < data.length; i++) push (data[i]);
     }
+
+    int height (Node* node, int i)
+    {
+        if (!node) return i - 1;
+
+        if (height (node->left, i + 1) > height (node->right, i + 1))
+            return height (node->left, i + 1);
+        else return height (node->right, i + 1);
+    }
+
+    int height () { return height (root, 1); }
 };
 
 void print (Tree<int>::Node* node)
 {
-    if (!node)
-        return;
+    if (!node) return;
 
     printf ("%d\n", node->data);
 
@@ -280,34 +483,38 @@ struct string : public Array<char>
 {
     char* c_str_data;
 
-    string ()
-    {
-        c_str_data = nullptr;
-    }
+    string () { c_str_data = nullptr; }
 
     string (const char* str)
     {
-        for (int i = 0; str[i] != '\0'; i++)
-            push (str[i]);
+        c_str_data = nullptr;
+
+        for (int i = 0; str[i] != '\0'; i++) push (str[i]);
     }
 
     string (size_t size)
     {
+        c_str_data = nullptr;
+
         this->size = size;
         data       = new char[size];
     }
 
+    void clean ()
+    {
+        if (c_str_data) delete c_str_data;
+        if (data) delete data;
+    }
+
     char* c_str ()
     {
-        if (c_str_data != nullptr)
-            free (c_str_data);
+        if (c_str_data != nullptr) free (c_str_data);
 
         c_str_data = new char[length + 1];
 
         size_t i = 0;
 
-        for (; i < length; i++)
-            c_str_data[i] = this->data[i];
+        for (; i < length; i++) c_str_data[i] = this->data[i];
 
         c_str_data[i] = '\0';
 
@@ -320,31 +527,24 @@ struct string : public Array<char>
 
         for (size_t i = 0; i < length && i < b.length; i++)
         {
-            if (data[i] < b[i])
-                return true;
-            else if (data[i] > b[i])
-                return false;
+            if (data[i] < b[i]) return true;
+            else if (data[i] > b[i]) return false;
         }
 
         return false;
     }
 
-    inline bool operator> (string b)
-    {
-        return b < (*this);
-    }
+    inline bool operator> (string b) { return b < (*this); }
 
     inline bool operator== (string b)
     {
         assert (b.length > 0 && length > 0);
 
-        if (b.length != length)
-            return false;
+        if (b.length != length) return false;
 
         for (size_t i = 0; i < length; i++)
         {
-            if (data[i] != b[i])
-                return false;
+            if (data[i] != b[i]) return false;
         }
 
         return true;
@@ -366,21 +566,47 @@ string read_file (const char* filename)
 
     char c = '0';
 
-    while ((c = fgetc (fp)) != EOF)
-        str.push (c);
+    while ((c = fgetc (fp)) != EOF) str.push (c);
 
     fclose (fp);
 
     return str;
 }
 
-namespace shader
+struct Shader
 {
-    uint compile (const char* code, uint type)
-    {
-        sint shader = glCreateShader (type), is_compiled = 0;
+    uint vao, vbo;
+    sint id, vertex, fragment;
 
-        glShaderSource (shader, 1, &code, 0);
+    Shader () { id = vertex = fragment = vbo = vao = 0; }
+
+    Shader (const char* vs_file, const char* fs_file)
+    {
+        init (vs_file, fs_file);
+    }
+
+    void set (const char* name, sint val)
+    {
+        glUniform1i (glGetUniformLocation (id, name), val);
+    }
+
+    void set (const char* name, Vec3 val)
+    {
+        glUniform3fv (glGetUniformLocation (id, name), 1, val.data);
+    }
+
+    void set (const char* name, Mat4 val)
+    {
+        glUniformMatrix4fv (glGetUniformLocation (id, name), 1, GL_TRUE,
+                            val[0]);
+    }
+
+    sint compile (string code, uint type)
+    {
+        char* cstr   = code.c_str ();
+        sint  shader = glCreateShader (type), is_compiled = 0;
+
+        glShaderSource (shader, 1, &cstr, 0);
         glCompileShader (shader);
         glGetShaderiv (shader, GL_COMPILE_STATUS, &is_compiled);
 
@@ -397,115 +623,66 @@ namespace shader
             assert (is_compiled != GL_FALSE);
         }
 
+        code.clean ();
+
         return shader;
     }
 
-    uint program (const char* vs_file, const char* fs_file)
+    void init (const char* vs_file, const char* fs_file)
     {
-        uint vertex = compile (read_file (vs_file).c_str (), GL_VERTEX_SHADER);
-        uint fragment
-            = compile (read_file (fs_file).c_str (), GL_FRAGMENT_SHADER);
+        vertex   = compile (read_file (vs_file), GL_VERTEX_SHADER);
+        fragment = compile (read_file (fs_file), GL_FRAGMENT_SHADER);
 
-        uint shader = glCreateProgram ();
+        id = glCreateProgram ();
 
-        glAttachShader (shader, vertex);
-        glAttachShader (shader, fragment);
+        glAttachShader (id, vertex);
+        glAttachShader (id, fragment);
 
-        glLinkProgram (shader);
+        glLinkProgram (id);
 
-        uint is_linked;
-        glGetProgramiv (shader, GL_LINK_STATUS, (int*)&is_linked);
+        sint is_linked;
+        glGetProgramiv (id, GL_LINK_STATUS, &is_linked);
 
         assert (is_linked != false);
 
-        return shader;
+        glUseProgram (id);
+        set ("u_color", { 1, 1, 0 });
+        set ("u_model", get_model ({ 0, 0 }, { 32, 32 }, 0));
+        set ("u_projection", ortho (640, 320));
+
+        init_buffers ();
     }
-}
 
-struct Vec2
-{
-    float  data[2];
-    float &x = data[0], &y = data[1];
-
-    float& operator[] (int index)
+    void init_buffers ()
     {
-        return data[index];
+        const float points[] = {
+            0.0f, 1.0f,    //
+            1.0f, 0.0f,    //
+            0.0f, 0.0f,    //
+
+            0.0f, 1.0f,    //
+            1.0f, 1.0f,    //
+            1.0f, 0.0f,    //
+        };
+
+        glGenVertexArrays (1, &vao);
+        glGenBuffers (1, &vbo);
+
+        glBindVertexArray (vao);
+        glBindBuffer (GL_ARRAY_BUFFER, vbo);
+
+        glVertexAttribPointer (0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        glEnableVertexAttribArray (0);
+
+        glBufferData (GL_ARRAY_BUFFER, sizeof (points), points, GL_STATIC_DRAW);
+    }
+
+    void use ()
+    {
+        glBindVertexArray (vao);
+        glUseProgram (id);
     }
 };
-
-struct Vec4
-{
-    float  data[4];
-    float &x = data[0], &y = data[1], &z = data[2], &w = data[3];
-
-    Vec4 ()
-    {
-        for (int i = 0; i < 4; i++)
-        {
-            data[i] = 0;
-        }
-    }
-
-    Vec4 (float x, float y, float z, float w)
-    {
-        data[0] = x;
-        data[1] = y;
-        data[2] = z;
-        data[3] = w;
-    }
-
-    float& operator[] (uint index)
-    {
-        assert (index < 4);
-
-        return data[index];
-    }
-};
-
-struct Mat4
-{
-    float data[4][4];
-
-    Mat4 (Vec4 a, Vec4 b, Vec4 c, Vec4 d)
-    {
-        data[0][0] = a.x;
-        data[0][1] = a.y;
-        data[0][2] = a.z;
-        data[0][3] = a.w;
-
-        data[1][0] = b.x;
-        data[1][1] = b.y;
-        data[1][2] = b.z;
-        data[1][3] = b.y;
-
-        data[2][0] = c.x;
-        data[2][1] = c.y;
-        data[2][2] = c.z;
-        data[2][3] = c.y;
-
-        data[3][0] = d.x;
-        data[3][1] = d.w;
-        data[3][2] = d.z;
-        data[3][3] = d.w;
-    }
-
-    float* operator[] (uint i)
-    {
-        assert (i < 4);
-
-        return data[i];
-    }
-};
-
-Mat4 identity ()
-{
-    return {
-        { 1, 0, 0, 0 },
-        { 0, 1, 0, 0 },
-        { 0, 0, 1, 0 },
-        { 0, 0, 0, 1 },
-    };
-}
 
 int main (int argc, char** argv)
 {
@@ -515,8 +692,7 @@ int main (int argc, char** argv)
     TTF_Font* font = TTF_OpenFont (
         "/usr/share/fonts/liberation/LiberationMono-Regular.ttf", 12);
 
-    if (!font)
-        printf ("font: %s\n", SDL_GetError ());
+    if (!font) printf ("font: %s\n", SDL_GetError ());
 
     SDL_Window* window
         = SDL_CreateWindow ("shipcade", 0, 0, 1280, 720, SDL_WINDOW_OPENGL);
@@ -535,22 +711,13 @@ int main (int argc, char** argv)
 
     glewInit ();
 
-    Tree<int> tree = {
-        3, 2, 5, 4, 1,
-    };
-
-    print (tree.root);
+    Tree<int> tree = { 3, 2, 5, 4, 1, 9, 8, 10, 15, 22, -1, -2, -3, -4 };
 
     Texture spritesheet (icon_xpm);
 
-    Vec2 lul;
+    Shader shader ("vertex.glsl", "fragment.glsl");
 
-    lul.x = 5;
-
-    lul[0] = 5;
-    lul[0] = 1;
-
-    uint program = shader::program ("vertex.glsl", "fragment.glsl");
+    printf ("%d\n", tree.height ());
 
     while (run)
     {
@@ -562,8 +729,11 @@ int main (int argc, char** argv)
             }
         }
 
-        glClearColor (0, 0, 0, 1);
-        glClear (GL_CLEAR_BUFFER);
+        glClearColor (0.f, 0.f, 0.f, 1.f);
+        glClear (GL_COLOR_BUFFER_BIT);
+
+        shader.use ();
+        glDrawArrays (GL_TRIANGLES, 0, 6);
 
         SDL_GL_SwapWindow (window);
     }
