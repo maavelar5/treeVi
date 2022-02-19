@@ -1,11 +1,17 @@
 #version 330 core
 
+in vec2  tex_coords;
 out vec4 color;
 
-uniform vec3 u_color;
+uniform vec3      u_color;
+uniform vec4      u_offset;
+uniform sampler2D u_image;
+
+uniform float u_alpha;
 
 void main ()
 {
-    //
-    color = vec4 (u_color, 1);
+    vec2 t = tex_coords;
+
+    color = texture (u_image, t * u_offset.zw + u_offset.xy) * u_alpha;
 }

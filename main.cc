@@ -36,11 +36,13 @@ static char* icon_xpm[] = {
     "                                ",
 };
 
+#include "font.xpm"
+
 template <int size, class VecN> struct Vec
 {
     float data[size];
 
-    Vec ()
+    void init ()
     {
         for (int i = 0; i < size; i++) data[i] = 0;
     }
@@ -48,23 +50,40 @@ template <int size, class VecN> struct Vec
     float& operator[] (int index)
     {
         assert (index < size);
+
         return data[index];
     }
 
-    VecN operator+ (VecN a)
+    VecN& equals (const VecN& value)
+    {
+        for (int i = 0; i < size; i++) data[i] = value.data[i];
+
+        return (VecN&)*this;
+    }
+
+    VecN operator+ (VecN value)
     {
         VecN result;
 
-        for (int i = 0; i < size; i++) result[i] = (data[i] + a[i]);
+        for (int i = 0; i < size; i++) result[i] = data[i] + value[i];
 
         return result;
     }
 
-    VecN operator* (float scalar)
+    VecN operator- (VecN value)
     {
         VecN result;
 
-        for (int i = 0; i < size; i++) result[i] = (data[i] * scalar);
+        for (int i = 0; i < size; i++) result[i] = data[i] - value[i];
+
+        return result;
+    }
+
+    VecN operator* (float value)
+    {
+        VecN result;
+
+        for (int i = 0; i < size; i++) result[i] = data[i] * value;
 
         return result;
     }
@@ -74,20 +93,22 @@ struct Vec2 : public Vec<2, Vec2>
 {
     float &x = data[0], &y = data[1];
 
-    Vec2 () { }
+    Vec2 () { init (); }
 
     Vec2 (float x, float y)
     {
         data[0] = x;
         data[1] = y;
     }
+
+    Vec2& operator= (const Vec2& val) { return equals (val); }
 };
 
 struct Vec3 : public Vec<3, Vec3>
 {
     float &x = data[0], &y = data[1], &z = data[2];
 
-    Vec3 () { }
+    Vec3 () { init (); }
 
     Vec3 (float x, float y, float z)
     {
@@ -101,10 +122,7 @@ struct Vec4 : public Vec<4, Vec4>
 {
     float &x = data[0], &y = data[1], &z = data[2], &w = data[3];
 
-    Vec4 ()
-    {
-        for (int i = 0; i < 4; i++) data[i] = 0;
-    }
+    Vec4 () { init (); }
 
     Vec4 (float x, float y, float z, float w)
     {
@@ -305,7 +323,7 @@ struct Texture
 typedef GLuint uint;
 typedef GLint  sint;
 
-template <class K, class V> class kv
+template <class K, class V> struct kv
 {
     K key;
     V val;
@@ -405,6 +423,15 @@ template <class T> struct Array
     T& operator[] (size_t index)
     {
         return (index >= length) ? data[length - 1] : data[index];
+    }
+
+    void clean ()
+    {
+        if (data) delete data;
+
+        data = nullptr;
+
+        length = size = 0;
     }
 };
 
@@ -573,6 +600,9 @@ string read_file (const char* filename)
     return str;
 }
 
+const float W = 1280.f;
+const float H = 720.f;
+
 struct Shader
 {
     uint vao, vbo;
@@ -590,9 +620,24 @@ struct Shader
         glUniform1i (glGetUniformLocation (id, name), val);
     }
 
+    void set (const char* name, float val)
+    {
+        glUniform1f (glGetUniformLocation (id, name), val);
+    }
+
     void set (const char* name, Vec3 val)
     {
         glUniform3fv (glGetUniformLocation (id, name), 1, val.data);
+    }
+
+    void set (const char* name, Vec4 val)
+    {
+        glUniform4fv (glGetUniformLocation (id, name), 1, val.data);
+    }
+
+    void set (const char* name, Vec2 val)
+    {
+        glUniform2fv (glGetUniformLocation (id, name), 1, val.data);
     }
 
     void set (const char* name, Mat4 val)
@@ -647,8 +692,11 @@ struct Shader
 
         glUseProgram (id);
         set ("u_color", { 1, 1, 0 });
-        set ("u_model", get_model ({ 0, 0 }, { 32, 32 }, 0));
-        set ("u_projection", ortho (640, 320));
+        set ("u_projection", ortho (W, H));
+
+        set ("u_image", 0);
+        set ("u_offset", { 0, 0, .1, .1 });
+        set ("u_alpha", 1.f);
 
         init_buffers ();
     }
@@ -684,6 +732,19 @@ struct Shader
     }
 };
 
+Array<kv<float, Vec2> > nodes;
+
+void graphical_nodes (Tree<float>::Node* node, Vec2 size, float w = 0,
+                      float h = 0, int offset = 0)
+{
+    if (!node) return;
+
+    nodes.push ({ node->data, { w * size.x, h * size.y } });
+
+    graphical_nodes (node->left, size, w - offset, h + 1.2, offset - 1.f);
+    graphical_nodes (node->right, size, w + offset, h + 1.2, offset - 1.f);
+}
+
 int main (int argc, char** argv)
 {
     SDL_Init (SDL_INIT_EVERYTHING);
@@ -695,7 +756,7 @@ int main (int argc, char** argv)
     if (!font) printf ("font: %s\n", SDL_GetError ());
 
     SDL_Window* window
-        = SDL_CreateWindow ("shipcade", 0, 0, 1280, 720, SDL_WINDOW_OPENGL);
+        = SDL_CreateWindow ("shipcade", 0, 0, W, H, SDL_WINDOW_OPENGL);
 
     bool      run = true;
     SDL_Event event;
@@ -707,17 +768,24 @@ int main (int argc, char** argv)
     }
 
     SDL_GL_CreateContext (window);
-    SDL_GL_SetSwapInterval (0);
 
     glewInit ();
 
-    Tree<int> tree = { 3, 2, 5, 4, 1, 9, 8, 10, 15, 22, -1, -2, -3, -4 };
+    SDL_GL_SetSwapInterval (0);
 
-    Texture spritesheet (icon_xpm);
+    Tree<float> tree = { 5, 3, 2, 4, 7, 6, 8, 15, 10, 9, 11, 16, 4.5, 5.5 };
+
+    Texture spritesheet (font_xpm);
 
     Shader shader ("vertex.glsl", "fragment.glsl");
 
-    printf ("%d\n", tree.height ());
+    Vec2 height = {
+        W / ((tree.height () * 8) + tree.height ()),
+        H / (tree.height () * 8),
+    };
+
+    glEnable (GL_BLEND);
+    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     while (run)
     {
@@ -732,9 +800,43 @@ int main (int argc, char** argv)
         glClearColor (0.f, 0.f, 0.f, 1.f);
         glClear (GL_COLOR_BUFFER_BIT);
 
+        graphical_nodes (tree.root, height, tree.height () * 4, 0,
+                         tree.height ());
+
         shader.use ();
-        glDrawArrays (GL_TRIANGLES, 0, 6);
+        glBindTexture (GL_TEXTURE0, spritesheet.id);
+
+        for (size_t i = 0; i < nodes.length; i++)
+        {
+            char p[10];
+
+            // TODO: .1 after calculating per subtree spacing
+            sprintf (p, "%.0f", nodes[i].key);
+
+            for (size_t j = 0; j < strlen (p); j++)
+            {
+                Vec4 offset = { 0, .4, .1, .1 };
+
+                if (p[j] == '.')
+                {
+                    // TODO: first work with in-between space
+                    //  offset.x = .6;
+                    //  offset.y = .2;
+                    continue;
+                }
+                else offset.x = (p[j] - 48) / 10.f;
+
+                shader.set ("u_offset", offset);
+                shader.set ("u_model", get_model (nodes[i].val, height, 0));
+
+                glDrawArrays (GL_TRIANGLES, 0, 6);
+
+                nodes[i].val.x += 16;
+            }
+        }
 
         SDL_GL_SwapWindow (window);
+
+        nodes.length = 0;
     }
 }
