@@ -5,37 +5,6 @@
 
 #include <cassert>
 
-/* XPM */
-static char* icon_xpm[] = {
-    "32 23 3 1",
-    "     c #FFFFFF",
-    ".    c #000000",
-    "+    c #FFFF00",
-    "                                ",
-    "            ........            ",
-    "          ..++++++++..          ",
-    "         .++++++++++++.         ",
-    "        .++++++++++++++.        ",
-    "       .++++++++++++++++.       ",
-    "      .++++++++++++++++++.      ",
-    "      .+++....++++....+++.      ",
-    "     .++++.. .++++.. .++++.     ",
-    "     .++++....++++....++++.     ",
-    "     .++++++++++++++++++++.     ",
-    "     .++++++++++++++++++++.     ",
-    "     .+++++++++..+++++++++.     ",
-    "     .+++++++++..+++++++++.     ",
-    "     .++++++++++++++++++++.     ",
-    "      .++++++++++++++++++.      ",
-    "      .++...++++++++...++.      ",
-    "       .++............++.       ",
-    "        .++..........++.        ",
-    "         .+++......+++.         ",
-    "          ..++++++++..          ",
-    "            ........            ",
-    "                                ",
-};
-
 #include "font.xpm"
 
 template <int size, class VecN> struct Vec
@@ -66,6 +35,15 @@ template <int size, class VecN> struct Vec
         VecN result;
 
         for (int i = 0; i < size; i++) result[i] = data[i] + value[i];
+
+        return result;
+    }
+
+    VecN operator+ (float value)
+    {
+        VecN result;
+
+        for (int i = 0; i < size; i++) result[i] = data[i] + value;
 
         return result;
     }
@@ -484,7 +462,7 @@ template <class T> struct Tree
         for (size_t i = 0; i < data.length; i++) push (data[i]);
     }
 
-    int height (Node* node, int i)
+    static int height (Node* node, int i)
     {
         if (!node) return i - 1;
 
@@ -745,6 +723,22 @@ void graphical_nodes (Tree<float>::Node* node, Vec2 size, float w = 0,
     graphical_nodes (node->right, size, w + offset, h + 1.2, offset - 1.f);
 }
 
+void graphical_nodesi (Tree<float>::Node* node, float x = 0, float y = 0)
+{
+    if (!node) return;
+
+    float height = Tree<float>::height (node, 1) * 2;
+    // float l_height = Tree<float>::height (node->left, 1);
+    // float r_height = Tree<float>::height (node->right, 1);
+
+    Vec2 pos = { x + height, y };
+
+    nodes.push ({ node->data, (pos * 16.f) });
+
+    graphical_nodesi (node->left, x, y + 2);
+    graphical_nodesi (node->right, pos.x, y + 2);
+}
+
 int main (int argc, char** argv)
 {
     SDL_Init (SDL_INIT_EVERYTHING);
@@ -773,19 +767,24 @@ int main (int argc, char** argv)
 
     SDL_GL_SetSwapInterval (0);
 
-    Tree<float> tree = { 5, 3, 2, 4, 7, 6, 8, 15, 10, 9, 11, 16, 4.5, 5.5 };
+    Tree<float> tree = { 5, 3, 2, 4, 7, 6, 8, 15, 10, 9, 11, 16, 15, 6.5, 6.4 };
 
     Texture spritesheet (font_xpm);
 
     Shader shader ("vertex.glsl", "fragment.glsl");
 
-    Vec2 height = {
-        W / ((tree.height () * 8) + tree.height ()),
-        H / (tree.height () * 8),
-    };
+    Vec2 height = { 16, 16 };
 
     glEnable (GL_BLEND);
     glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // graphical_nodes (tree.root, height, tree.height () * 4, 0, tree.height
+    // ());
+    // graphical_nodesi (tree.root, { (float)tree.height () * 4, 0 });
+
+    // graphical_nodesi (tree.root);
+
+    // for (int i = 0; i < nodes.length; i++) { printf ("%f\n", nodes[i].key); }
 
     while (run)
     {
@@ -800,11 +799,10 @@ int main (int argc, char** argv)
         glClearColor (0.f, 0.f, 0.f, 1.f);
         glClear (GL_COLOR_BUFFER_BIT);
 
-        graphical_nodes (tree.root, height, tree.height () * 4, 0,
-                         tree.height ());
-
         shader.use ();
         glBindTexture (GL_TEXTURE0, spritesheet.id);
+
+        graphical_nodesi (tree.root);
 
         for (size_t i = 0; i < nodes.length; i++)
         {
@@ -813,6 +811,10 @@ int main (int argc, char** argv)
             // TODO: .1 after calculating per subtree spacing
             sprintf (p, "%.0f", nodes[i].key);
 
+            Vec2 pos = nodes[i].val;
+
+            shader.set ("u_type", true);
+
             for (size_t j = 0; j < strlen (p); j++)
             {
                 Vec4 offset = { 0, .4, .1, .1 };
@@ -820,23 +822,41 @@ int main (int argc, char** argv)
                 if (p[j] == '.')
                 {
                     // TODO: first work with in-between space
-                    //  offset.x = .6;
-                    //  offset.y = .2;
-                    continue;
+                    offset.x = .6;
+                    offset.y = .2;
+                    // continue;
                 }
                 else offset.x = (p[j] - 48) / 10.f;
 
                 shader.set ("u_offset", offset);
-                shader.set ("u_model", get_model (nodes[i].val, height, 0));
-
+                shader.set ("u_model", get_model (pos, height, 0));
                 glDrawArrays (GL_TRIANGLES, 0, 6);
 
-                nodes[i].val.x += 16;
+                pos.x += 16;
+            }
+
+            shader.set ("u_type", false);
+
+            if (i > 0)
+            {
+                Vec2 line = { pos.x - 8, pos.y - 8 };
+                Vec2 size = { 16, 1 };
+
+                if (nodes[i].key < nodes[i - 1].key)
+                {
+                    shader.set ("u_model", get_model (line, size, 300));
+                }
+                else {
+                    line.x -= 8;
+                    shader.set ("u_model", get_model (line, size, 240));
+                }
+
+                glDrawArrays (GL_LINES, 1, 3);
             }
         }
 
-        SDL_GL_SwapWindow (window);
-
         nodes.length = 0;
+
+        SDL_GL_SwapWindow (window);
     }
 }
