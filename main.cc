@@ -39,6 +39,15 @@ template <int size, class VecN> struct Vec
         return result;
     }
 
+    VecN operator/ (float value)
+    {
+        VecN result;
+
+        for (int i = 0; i < size; i++) result[i] = data[i] / value;
+
+        return result;
+    }
+
     VecN operator+ (float value)
     {
         VecN result;
@@ -64,6 +73,55 @@ template <int size, class VecN> struct Vec
         for (int i = 0; i < size; i++) result[i] = data[i] * value;
 
         return result;
+    }
+
+    VecN operator* (VecN value)
+    {
+        VecN result;
+
+        for (int i = 0; i < size; i++) result[i] = data[i] * value[i];
+
+        return result;
+    }
+
+    float length ()
+    {
+        float result = 0;
+
+        for (int i = 0; i < size; i++) result += (data[i] * data[i]);
+
+        return fsqrt (result);
+    }
+
+    VecN normalize ()
+    {
+        float len = length ();
+        VecN  result;
+
+        for (int i = 0; i < size; i++) result[i] = (data[i] / len);
+
+        return result;
+    }
+
+    static float angle (VecN a, VecN b)
+    {
+        // dot = x1*x2 + y1*y2      # dot product between [x1, y1] and [x2, y2]
+        // det = x1*y2 - y1*x2      # determinant
+        // angle = atan2(det, dot)
+
+        float dot = 0, det = 0;
+        float PI      = 3.141592;
+        float degrees = 180.f;
+
+        VecN c = (a - b).normalize ();
+
+        float angle = 0.f;
+
+        angle = atan2 (c.y, c.x) * 180.0f / 3.141592f;
+
+        angle = (angle >= 0) ? angle : 360.f + angle;
+
+        return angle;
     }
 };
 
@@ -239,7 +297,7 @@ inline void rotate (Mat4& matrix, float angle)
     matrix = mul (matrix, rotation_matrix);
 }
 
-inline Mat4 get_model (Vec2 pos, Vec2 size, float angle = 0)
+inline Mat4 get_model (Vec2 pos, Vec2 size, float angle = 0, bool center = true)
 {
     Mat4 matrix = identity ();
 
@@ -247,7 +305,8 @@ inline Mat4 get_model (Vec2 pos, Vec2 size, float angle = 0)
     translate (matrix, size * (0.5f));
 
     rotate (matrix, angle);
-    translate (matrix, size * (-0.5f));
+
+    if (center) translate (matrix, size * (-0.5f));
 
     scale (matrix, size);
 
@@ -710,33 +769,30 @@ struct Shader
     }
 };
 
-Array<kv<float, Vec2> > nodes;
-
-void graphical_nodes (Tree<float>::Node* node, Vec2 size, float w = 0,
-                      float h = 0, int offset = 0)
+struct Node_Reference
 {
-    if (!node) return;
+    float           key;
+    Vec2            val;
+    Node_Reference* parent;
+};
 
-    nodes.push ({ node->data, { w * size.x, h * size.y } });
+Array<Node_Reference> nodes;
 
-    graphical_nodes (node->left, size, w - offset, h + 1.2, offset - 1.f);
-    graphical_nodes (node->right, size, w + offset, h + 1.2, offset - 1.f);
-}
-
-void graphical_nodesi (Tree<float>::Node* node, float x = 0, float y = 0)
+void graphical_nodes (Tree<float>::Node* node, float x = 0, float y = 0,
+                      Node_Reference* parent = nullptr)
 {
     if (!node) return;
 
     float height = Tree<float>::height (node, 1) * 2;
-    // float l_height = Tree<float>::height (node->left, 1);
-    // float r_height = Tree<float>::height (node->right, 1);
 
     Vec2 pos = { x + height, y };
 
-    nodes.push ({ node->data, (pos * 16.f) });
+    nodes.push ({ node->data, (pos * 16.f), parent });
 
-    graphical_nodesi (node->left, x, y + 2);
-    graphical_nodesi (node->right, pos.x, y + 2);
+    Node_Reference* nr = &nodes[nodes.length - 1];
+
+    graphical_nodes (node->left, x, y + 2, nr);
+    graphical_nodes (node->right, pos.x, y + 2, nr);
 }
 
 int main (int argc, char** argv)
@@ -752,12 +808,15 @@ int main (int argc, char** argv)
     SDL_Window* window
         = SDL_CreateWindow ("shipcade", 0, 0, W, H, SDL_WINDOW_OPENGL);
 
+    assert (window != nullptr);
+
     bool      run = true;
     SDL_Event event;
 
     if (!window)
     {
         printf ("SDL_Window error: %s\n", SDL_GetError ());
+        assert (window != nullptr);
         return 0;
     }
 
@@ -767,24 +826,17 @@ int main (int argc, char** argv)
 
     SDL_GL_SetSwapInterval (0);
 
-    Tree<float> tree = { 5, 3, 2, 4, 7, 6, 8, 15, 10, 9, 11, 16, 15, 6.5, 6.4 };
+    glEnable (GL_BLEND);
+    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    Tree<float> tree = { 5, 3, 2, 4, 7, 6, 8, 15, 10, 9, 11, 16, 15, 13 };
 
     Texture spritesheet (font_xpm);
 
     Shader shader ("vertex.glsl", "fragment.glsl");
 
     Vec2 height = { 16, 16 };
-
-    glEnable (GL_BLEND);
-    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // graphical_nodes (tree.root, height, tree.height () * 4, 0, tree.height
-    // ());
-    // graphical_nodesi (tree.root, { (float)tree.height () * 4, 0 });
-
-    // graphical_nodesi (tree.root);
-
-    // for (int i = 0; i < nodes.length; i++) { printf ("%f\n", nodes[i].key); }
+    Vec2 mouse  = { 0, 0 };
 
     while (run)
     {
@@ -793,6 +845,14 @@ int main (int argc, char** argv)
             switch (event.type)
             {
                 case SDL_QUIT: run = false; break;
+                case SDL_MOUSEMOTION:
+                    int x, y;
+
+                    SDL_GetMouseState (&x, &y);
+
+                    mouse.x = x;
+                    mouse.y = y;
+                    break;
             }
         }
 
@@ -802,13 +862,12 @@ int main (int argc, char** argv)
         shader.use ();
         glBindTexture (GL_TEXTURE0, spritesheet.id);
 
-        graphical_nodesi (tree.root);
+        graphical_nodes (tree.root);
 
         for (size_t i = 0; i < nodes.length; i++)
         {
             char p[10];
 
-            // TODO: .1 after calculating per subtree spacing
             sprintf (p, "%.0f", nodes[i].key);
 
             Vec2 pos = nodes[i].val;
@@ -821,10 +880,8 @@ int main (int argc, char** argv)
 
                 if (p[j] == '.')
                 {
-                    // TODO: first work with in-between space
                     offset.x = .6;
                     offset.y = .2;
-                    // continue;
                 }
                 else offset.x = (p[j] - 48) / 10.f;
 
@@ -837,21 +894,27 @@ int main (int argc, char** argv)
 
             shader.set ("u_type", false);
 
-            if (i > 0)
+            if (nodes[i].parent)
             {
-                Vec2 line = { pos.x - 8, pos.y - 8 };
-                Vec2 size = { 16, 1 };
+                Vec2 node = nodes[i].val;
 
-                if (nodes[i].key < nodes[i - 1].key)
-                {
-                    shader.set ("u_model", get_model (line, size, 300));
-                }
-                else {
-                    line.x -= 8;
-                    shader.set ("u_model", get_model (line, size, 240));
-                }
+                char parent_string[20];
 
-                glDrawArrays (GL_LINES, 1, 3);
+                // TODO: .1 after calculating per subtree spacing
+                sprintf (parent_string, "%.0f", nodes[i].parent->key);
+
+                Vec2 parent = nodes[i].parent->val;
+                // parent.x -= (strlen (parent_string) * 16.f) / 2.f;
+
+                Vec2 diff = (parent - node) / 2.f;
+                Vec2 size = { (parent - node).x, 2 };
+                Vec2 line = { node.x - ((strlen (p) * 16.f) / 2.f),
+                              node.y + diff.y + 8 };
+
+                float angle = Vec<2, Vec2>::angle (parent, line);
+
+                shader.set ("u_model", get_model (line, size, angle));
+                glDrawArrays (GL_TRIANGLES, 0, 6);
             }
         }
 
@@ -859,4 +922,6 @@ int main (int argc, char** argv)
 
         SDL_GL_SwapWindow (window);
     }
+
+    SDL_Quit ();
 }

@@ -16,5 +16,5 @@ void main ()
 
     if (u_type == true)
         color = texture (u_image, t * u_offset.zw + u_offset.xy) * u_alpha;
-    else color = vec4 (1, 1, 0, 1);
+    else color = vec4 (1, 1, 0, 1) * .8;
 }
