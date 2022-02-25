@@ -7,108 +7,112 @@
 
 #include "font.xpm"
 
-template <int size, class VecN> struct Vec
+enum OPERATORS
 {
-    float data[size];
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+};
 
-    void init ()
+namespace vec
+{
+    template <class T> T operators (T a, T b, const int OP)
     {
-        for (int i = 0; i < size; i++) data[i] = 0;
-    }
+        T result;
 
-    float& operator[] (int index)
-    {
-        assert (index < size);
-
-        return data[index];
-    }
-
-    VecN& equals (const VecN& value)
-    {
-        for (int i = 0; i < size; i++) data[i] = value.data[i];
-
-        return (VecN&)*this;
-    }
-
-    VecN operator+ (VecN value)
-    {
-        VecN result;
-
-        for (int i = 0; i < size; i++) result[i] = data[i] + value[i];
+        for (size_t i = 0; i < a.axis; i++)
+        {
+            switch (OP)
+            {
+                case ADD: result[i] = a[i] + b[i]; break;
+                case SUB: result[i] = a[i] - b[i]; break;
+                case MUL: result[i] = a[i] * b[i]; break;
+                case DIV: result[i] = a[i] / b[i]; break;
+            }
+        }
 
         return result;
     }
 
-    VecN operator/ (float value)
+    template <class T> T operators (T a, float scalar, const int OP)
     {
-        VecN result;
+        T result;
 
-        for (int i = 0; i < size; i++) result[i] = data[i] / value;
+        for (size_t i = 0; i < a.axis; i++)
+        {
+            switch (OP)
+            {
+                case ADD: result[i] = a[i] + scalar; break;
+                case SUB: result[i] = a[i] - scalar; break;
+                case MUL: result[i] = a[i] * scalar; break;
+                case DIV: result[i] = a[i] / scalar; break;
+            }
+        }
 
         return result;
     }
 
-    VecN operator+ (float value)
-    {
-        VecN result;
-
-        for (int i = 0; i < size; i++) result[i] = data[i] + value;
-
-        return result;
-    }
-
-    VecN operator- (VecN value)
-    {
-        VecN result;
-
-        for (int i = 0; i < size; i++) result[i] = data[i] - value[i];
-
-        return result;
-    }
-
-    VecN operator* (float value)
-    {
-        VecN result;
-
-        for (int i = 0; i < size; i++) result[i] = data[i] * value;
-
-        return result;
-    }
-
-    VecN operator* (VecN value)
-    {
-        VecN result;
-
-        for (int i = 0; i < size; i++) result[i] = data[i] * value[i];
-
-        return result;
-    }
-
-    float length ()
+    template <class T> float length (T t)
     {
         float result = 0;
 
-        for (int i = 0; i < size; i++) result += (data[i] * data[i]);
+        for (size_t i = 0; i < t.axis; i++) result += (t[i] * t[i]);
 
         return fsqrt (result);
     }
 
-    VecN normalize ()
+    template <class T> T normalize (T v) { return v / v.length (); }
+
+    template <class T> float& at (T& v, size_t index)
     {
-        float len = length ();
-        VecN  result;
-
-        for (int i = 0; i < size; i++) result[i] = (data[i] / len);
-
-        return result;
+        assert (index < v.axis);
+        return v.data[index];
     }
-};
 
-struct Vec2 : public Vec<2, Vec2>
+    template <class T> void init (T& v)
+    {
+        for (size_t i = 0; i < v.axis; i++) v[i] = 0;
+    }
+
+    template <class T> T& copy (T& a, const T& b)
+    {
+        for (size_t i = 0; i < a.axis; i++) a[i] = b.data[i];
+
+        return a;
+    }
+}
+
+#define VEC_CONSTRUCTORS(type)     \
+    type () { vec::init (*this); } \
+    type (const type& val) { vec::copy (*this, val); }
+
+#define VEC_FUNCTIONS(type)                               \
+    type  normalize () { return vec::normalize (*this); } \
+    float length () { return vec::length (*this); }
+
+#define VEC_OPERATORS(type)                                               \
+    type   operator+ (type v) { return vec::operators (*this, v, ADD); }  \
+    type   operator- (type v) { return vec::operators (*this, v, SUB); }  \
+    type   operator* (type v) { return vec::operators (*this, v, MUL); }  \
+    type   operator/ (type v) { return vec::operators (*this, v, DIV); }  \
+    type   operator+ (float v) { return vec::operators (*this, v, ADD); } \
+    type   operator- (float v) { return vec::operators (*this, v, SUB); } \
+    type   operator* (float v) { return vec::operators (*this, v, MUL); } \
+    type   operator/ (float v) { return vec::operators (*this, v, DIV); } \
+    type&  operator= (const type& val) { return vec::copy (*this, val); } \
+    float& operator[] (size_t index) { return vec::at (*this, index); }
+
+#define VEC(size)                \
+    float  data[size];           \
+    size_t axis = size;          \
+    VEC_CONSTRUCTORS (Vec##size) \
+    VEC_FUNCTIONS (Vec##size)    \
+    VEC_OPERATORS (Vec##size)
+
+struct Vec2
 {
     float &x = data[0], &y = data[1];
-
-    Vec2 () { init (); }
 
     Vec2 (float x, float y)
     {
@@ -116,15 +120,13 @@ struct Vec2 : public Vec<2, Vec2>
         data[1] = y;
     }
 
-    Vec2 (const Vec2& val) { (*this) = equals (val); }
-
-    Vec2& operator= (const Vec2& val) { return equals (val); }
+    VEC (2);
 
     float angle (Vec2 b)
     {
-        // dot = x1*x2 + y1*y2      # dot product between [x1, y1] and [x2, y2]
-        // det = x1*y2 - y1*x2      # determinant
-        // angle = atan2(det, dot)
+        // dot = x1*x2 + y1*y2      # dot product between [x1, y1]
+        // and [x2, y2] det = x1*y2 - y1*x2      # determinant angle
+        // = atan2(det, dot)
 
         Vec2  c  = ((*this) - b).normalize ();
         float PI = 3.141592, degrees = 180.f, angle = 0.f;
@@ -135,11 +137,9 @@ struct Vec2 : public Vec<2, Vec2>
     }
 };
 
-struct Vec3 : public Vec<3, Vec3>
+struct Vec3
 {
     float &x = data[0], &y = data[1], &z = data[2];
-
-    Vec3 () { init (); }
 
     Vec3 (float x, float y, float z)
     {
@@ -148,16 +148,12 @@ struct Vec3 : public Vec<3, Vec3>
         data[2] = z;
     }
 
-    Vec3 (const Vec3& val) { (*this) = equals (val); }
-
-    Vec3& operator= (const Vec3& val) { return equals (val); }
+    VEC (3);
 };
 
-struct Vec4 : public Vec<4, Vec4>
+struct Vec4
 {
     float &x = data[0], &y = data[1], &z = data[2], &w = data[3];
-
-    Vec4 () { init (); }
 
     Vec4 (float x, float y, float z, float w)
     {
@@ -166,6 +162,8 @@ struct Vec4 : public Vec<4, Vec4>
         data[2] = z;
         data[3] = w;
     }
+
+    VEC (4);
 };
 
 struct Mat4
@@ -835,7 +833,7 @@ int main (int argc, char** argv)
     Shader shader ("vertex.glsl", "fragment.glsl");
 
     Vec2 height = { 16, 16 };
-    Vec2 mouse  = { 0, 0 };
+    Vec2 mouse;
 
     while (run)
     {
@@ -865,9 +863,9 @@ int main (int argc, char** argv)
 
         for (size_t i = 0; i < nodes.length; i++)
         {
-            char p[10];
+            char p[20];
 
-            sprintf (p, "%.0f", nodes[i].key);
+            snprintf (p, 20, "%.0f", nodes[i].key);
 
             Vec2 pos = nodes[i].val;
             shader.set ("u_type", false);
@@ -878,7 +876,7 @@ int main (int argc, char** argv)
 
                 char parent_string[20];
 
-                sprintf (parent_string, "%.0f", nodes[i].parent->key);
+                snprintf (parent_string, 20, "%.0f", nodes[i].key);
 
                 Vec2 parent = nodes[i].parent->val;
                 Vec2 diff   = (parent - node) / 2.f;
