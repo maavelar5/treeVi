@@ -322,6 +322,7 @@ struct Texture
     }
 
     Texture (char** xpm) { init (xpm); }
+    Texture (SDL_Surface* surface) { init (surface); }
 
     void init (char** xpm)
     {
@@ -351,6 +352,36 @@ struct Texture
 
         w = surface->w;
         h = surface->h;
+    }
+
+    void init (SDL_Surface* surface)
+    {
+        assert (surface != NULL);
+
+        this->surface
+            = SDL_ConvertSurfaceFormat (surface, SDL_PIXELFORMAT_RGBA32, 0);
+
+        int mode            = GL_RGB;
+        int internal_format = GL_SRGB_ALPHA;
+
+        if (this->surface->format->BytesPerPixel == 4) mode = GL_RGBA;
+
+        glGenTextures (1, &id);
+        glBindTexture (GL_TEXTURE_2D, id);
+
+        glTexImage2D (GL_TEXTURE_2D, 0, internal_format, this->surface->w,
+                      this->surface->h, 0, mode, GL_UNSIGNED_BYTE,
+                      this->surface->pixels);
+
+        glGenerateMipmap (GL_TEXTURE_2D);
+
+        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        w = this->surface->w;
+        h = this->surface->h;
     }
 };
 
@@ -792,15 +823,33 @@ void graphical_nodes (Tree<float>::Node* node, float x = 0, float y = 0,
     graphical_nodes (node->right, pos.x, y + 2, nr);
 }
 
+Array<kv<char, Texture> > charset;
+
+TTF_Font* font = nullptr;
+
+Texture get_char (char c)
+{
+    for (size_t i = 0; i < charset.length; i++)
+    {
+        printf ("%c\n", charset[i].key);
+        if (charset[i].key == c) return charset[i].val;
+    }
+
+    const char text[2] = { c, '\0' };
+
+    SDL_Surface* surface = TTF_RenderText_Solid (font, text, { 255, 255, 200 });
+
+    Texture t (surface);
+
+    charset.push ({ c, t });
+
+    return t;
+}
+
 int main (int argc, char** argv)
 {
     SDL_Init (SDL_INIT_EVERYTHING);
     TTF_Init ();
-
-    TTF_Font* font = TTF_OpenFont (
-        "/usr/share/fonts/liberation/LiberationMono-Regular.ttf", 12);
-
-    if (!font) printf ("font: %s\n", SDL_GetError ());
 
     SDL_Window* window
         = SDL_CreateWindow ("shipcade", 0, 0, W, H, SDL_WINDOW_OPENGL);
@@ -826,6 +875,11 @@ int main (int argc, char** argv)
     glEnable (GL_BLEND);
     glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    font = TTF_OpenFont (
+        "/usr/share/fonts/liberation/LiberationMono-Regular.ttf", 14);
+
+    if (!font) printf ("font: %s\n", SDL_GetError ());
+
     Tree<float> tree = { 5, 3, 2, 4, 7, 6, 8, 15, 10, 9, 11, 16, 15, 13 };
 
     Texture spritesheet (font_xpm);
@@ -833,6 +887,11 @@ int main (int argc, char** argv)
     Shader shader ("vertex.glsl", "fragment.glsl");
 
     Vec2 height = { 16, 16 };
+
+    int fw, fh;
+
+    TTF_SizeText (font, "a", &fw, &fh);
+
     Vec2 mouse;
 
     while (run)
@@ -868,7 +927,7 @@ int main (int argc, char** argv)
             snprintf (p, 20, "%.0f", nodes[i].key);
 
             Vec2 pos = nodes[i].val;
-            shader.set ("u_type", false);
+            shader.set ("u_type", 0);
 
             if (nodes[i].parent)
             {
@@ -890,7 +949,8 @@ int main (int argc, char** argv)
                 glDrawArrays (GL_TRIANGLES, 0, 6);
             }
 
-            shader.set ("u_type", true);
+#if 1
+            shader.set ("u_type", 1);
 
             for (size_t j = 0; j < strlen (p); j++)
             {
@@ -909,8 +969,24 @@ int main (int argc, char** argv)
 
                 pos.x += 16;
             }
-        }
+#endif
 
+#if 0
+            shader.set ("u_type", 2);
+
+            for (size_t j = 0; j < strlen (p); j++)
+            {
+                Texture t = get_char (p[j]);
+
+                glBindTexture (GL_TEXTURE_2D, t.id);
+
+                shader.set ("u_model", get_model (pos, { (float)fw, 16 }, 0));
+                glDrawArrays (GL_TRIANGLES, 0, 6);
+
+                pos.x += 16;
+            }
+#endif
+        }
         nodes.length = 0;
 
         SDL_GL_SwapWindow (window);
