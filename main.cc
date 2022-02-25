@@ -102,27 +102,6 @@ template <int size, class VecN> struct Vec
 
         return result;
     }
-
-    static float angle (VecN a, VecN b)
-    {
-        // dot = x1*x2 + y1*y2      # dot product between [x1, y1] and [x2, y2]
-        // det = x1*y2 - y1*x2      # determinant
-        // angle = atan2(det, dot)
-
-        float dot = 0, det = 0;
-        float PI      = 3.141592;
-        float degrees = 180.f;
-
-        VecN c = (a - b).normalize ();
-
-        float angle = 0.f;
-
-        angle = atan2 (c.y, c.x) * 180.0f / 3.141592f;
-
-        angle = (angle >= 0) ? angle : 360.f + angle;
-
-        return angle;
-    }
 };
 
 struct Vec2 : public Vec<2, Vec2>
@@ -137,7 +116,23 @@ struct Vec2 : public Vec<2, Vec2>
         data[1] = y;
     }
 
+    Vec2 (const Vec2& val) { (*this) = equals (val); }
+
     Vec2& operator= (const Vec2& val) { return equals (val); }
+
+    float angle (Vec2 b)
+    {
+        // dot = x1*x2 + y1*y2      # dot product between [x1, y1] and [x2, y2]
+        // det = x1*y2 - y1*x2      # determinant
+        // angle = atan2(det, dot)
+
+        Vec2  c  = ((*this) - b).normalize ();
+        float PI = 3.141592, degrees = 180.f, angle = 0.f;
+
+        angle = atan2 (c.y, c.x) * degrees / PI;
+
+        return angle;
+    }
 };
 
 struct Vec3 : public Vec<3, Vec3>
@@ -152,6 +147,10 @@ struct Vec3 : public Vec<3, Vec3>
         data[1] = y;
         data[2] = z;
     }
+
+    Vec3 (const Vec3& val) { (*this) = equals (val); }
+
+    Vec3& operator= (const Vec3& val) { return equals (val); }
 };
 
 struct Vec4 : public Vec<4, Vec4>
@@ -871,6 +870,27 @@ int main (int argc, char** argv)
             sprintf (p, "%.0f", nodes[i].key);
 
             Vec2 pos = nodes[i].val;
+            shader.set ("u_type", false);
+
+            if (nodes[i].parent)
+            {
+                Vec2 node = nodes[i].val;
+
+                char parent_string[20];
+
+                sprintf (parent_string, "%.0f", nodes[i].parent->key);
+
+                Vec2 parent = nodes[i].parent->val;
+                Vec2 diff   = (parent - node) / 2.f;
+                Vec2 size   = { (parent - node).x, 2 };
+                Vec2 line   = { node.x + ((strlen (p) * 16.f) / 2.f),
+                              node.y + diff.y + 8 };
+
+                float angle = parent.angle (line);
+
+                shader.set ("u_model", get_model (line, size, angle));
+                glDrawArrays (GL_TRIANGLES, 0, 6);
+            }
 
             shader.set ("u_type", true);
 
@@ -890,31 +910,6 @@ int main (int argc, char** argv)
                 glDrawArrays (GL_TRIANGLES, 0, 6);
 
                 pos.x += 16;
-            }
-
-            shader.set ("u_type", false);
-
-            if (nodes[i].parent)
-            {
-                Vec2 node = nodes[i].val;
-
-                char parent_string[20];
-
-                // TODO: .1 after calculating per subtree spacing
-                sprintf (parent_string, "%.0f", nodes[i].parent->key);
-
-                Vec2 parent = nodes[i].parent->val;
-                // parent.x -= (strlen (parent_string) * 16.f) / 2.f;
-
-                Vec2 diff = (parent - node) / 2.f;
-                Vec2 size = { (parent - node).x, 2 };
-                Vec2 line = { node.x - ((strlen (p) * 16.f) / 2.f),
-                              node.y + diff.y + 8 };
-
-                float angle = Vec<2, Vec2>::angle (parent, line);
-
-                shader.set ("u_model", get_model (line, size, angle));
-                glDrawArrays (GL_TRIANGLES, 0, 6);
             }
         }
 
