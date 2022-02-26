@@ -205,7 +205,7 @@ Mat4 identity ()
     };
 }
 
-inline Mat4 ortho (float W, float H)
+Mat4 ortho (float W, float H)
 {
     float r = W, t = 0;
     float l = 0, b = H;
@@ -478,11 +478,13 @@ template <class T> struct Array
         }
     }
 
-    void push (T value)
+    T& push (T value)
     {
         resize ();
 
         data[length++] = value;
+
+        return data[length - 1];
     }
 
     T& operator[] (size_t index)
@@ -559,6 +561,7 @@ template <class T> struct Tree
     }
 
     int height () { return height (root, 1); }
+    int height (Node* node) { return height (node, 1); }
 };
 
 void print (Tree<int>::Node* node)
@@ -811,16 +814,14 @@ void graphical_nodes (Tree<float>::Node* node, float x = 0, float y = 0,
 {
     if (!node) return;
 
-    float height = Tree<float>::height (node, 1) * 2;
+    float l_height = Tree<float>::height (node->left, 1) * 3;
 
-    Vec2 pos = { x + height, y };
+    Vec2 pos = { x + l_height + 1, y };
 
-    nodes.push ({ node->data, (pos * 16.f), parent });
-
-    Node_Reference* nr = &nodes[nodes.length - 1];
+    Node_Reference* nr = &nodes.push ({ node->data, (pos * 16.f), parent });
 
     graphical_nodes (node->left, x, y + 2, nr);
-    graphical_nodes (node->right, pos.x, y + 2, nr);
+    graphical_nodes (node->right, pos.x + 1, y + 2, nr);
 }
 
 Array<kv<char, Texture> > charset;
@@ -830,20 +831,13 @@ TTF_Font* font = nullptr;
 Texture get_char (char c)
 {
     for (size_t i = 0; i < charset.length; i++)
-    {
-        printf ("%c\n", charset[i].key);
         if (charset[i].key == c) return charset[i].val;
-    }
 
     const char text[2] = { c, '\0' };
 
     SDL_Surface* surface = TTF_RenderText_Solid (font, text, { 255, 255, 200 });
 
-    Texture t (surface);
-
-    charset.push ({ c, t });
-
-    return t;
+    return charset.push ({ c, Texture (surface) }).val;
 }
 
 int main (int argc, char** argv)
@@ -880,7 +874,17 @@ int main (int argc, char** argv)
 
     if (!font) printf ("font: %s\n", SDL_GetError ());
 
-    Tree<float> tree = { 5, 3, 2, 4, 7, 6, 8, 15, 10, 9, 11, 16, 15, 13 };
+    //              5
+    //     3                7
+    // 2       4        6       8
+    //                                   15
+    //                         10               16
+    //                     9        11     15
+    //                                  13
+
+    Tree<float> tree
+        = { 5,  3,  2,  4,    7,  6,  8,  15, 10, 9,   11,  16,  15.5, 13, -1,
+            -2, -3, -4, 15.2, 14, 20, 25, 30, 40, 560, -10, -20, -30,  -35 };
 
     Texture spritesheet (font_xpm);
 
@@ -918,7 +922,7 @@ int main (int argc, char** argv)
         shader.use ();
         glBindTexture (GL_TEXTURE0, spritesheet.id);
 
-        graphical_nodes (tree.root);
+        graphical_nodes (tree.root, 0, 1);
 
         for (size_t i = 0; i < nodes.length; i++)
         {
@@ -926,8 +930,9 @@ int main (int argc, char** argv)
 
             snprintf (p, 20, "%.0f", nodes[i].key);
 
-            Vec2 pos = nodes[i].val;
             shader.set ("u_type", 0);
+            shader.set ("u_alpha", 1.f);
+            shader.set ("u_color", { 0, .4, 1 });
 
             if (nodes[i].parent)
             {
@@ -940,16 +945,32 @@ int main (int argc, char** argv)
                 Vec2 parent = nodes[i].parent->val;
                 Vec2 diff   = (parent - node) / 2.f;
                 Vec2 size   = { (parent - node).x, 2 };
-                Vec2 line   = { node.x + ((strlen (p) * 16.f) / 2.f),
-                              node.y + diff.y + 8 };
+                Vec2 line   = { node.x + ((strlen (p) * height.x) / 2.f),
+                              node.y + diff.y + (height.y / 2.f) };
 
                 float angle = parent.angle (line);
 
                 shader.set ("u_model", get_model (line, size, angle));
                 glDrawArrays (GL_TRIANGLES, 0, 6);
             }
+        }
 
-#if 1
+        for (size_t i = 0; i < nodes.length; i++)
+        {
+            char p[20];
+
+            snprintf (p, 20, "%.0f", nodes[i].key);
+
+            Vec2 pos        = nodes[i].val;
+            Vec2 block_size = { strlen (p) * height.x, height.y };
+
+            shader.set ("u_type", 0);
+            shader.set ("u_color", { 0.8f, .2f, 0.f });
+            shader.set ("u_alpha", 1.f);
+
+            shader.set ("u_model", get_model (pos, block_size, 0));
+            glDrawArrays (GL_TRIANGLES, 0, 6);
+#if 0
             shader.set ("u_type", 1);
 
             for (size_t j = 0; j < strlen (p); j++)
@@ -959,6 +980,10 @@ int main (int argc, char** argv)
                 if (p[j] == '.')
                 {
                     offset.x = .6;
+                    offset.y = .2;
+                }
+                else if (p[j] == '-') {
+                    offset.x = .7;
                     offset.y = .2;
                 }
                 else offset.x = (p[j] - 48) / 10.f;
@@ -971,7 +996,7 @@ int main (int argc, char** argv)
             }
 #endif
 
-#if 0
+#if 1
             shader.set ("u_type", 2);
 
             for (size_t j = 0; j < strlen (p); j++)
@@ -980,13 +1005,14 @@ int main (int argc, char** argv)
 
                 glBindTexture (GL_TEXTURE_2D, t.id);
 
-                shader.set ("u_model", get_model (pos, { (float)fw, 16 }, 0));
+                shader.set ("u_model", get_model (pos, { height.x, 16 }, 0));
                 glDrawArrays (GL_TRIANGLES, 0, 6);
 
-                pos.x += 16;
+                pos.x += height.x;
             }
 #endif
         }
+
         nodes.length = 0;
 
         SDL_GL_SwapWindow (window);
