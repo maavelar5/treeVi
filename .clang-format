@@ -76,3 +76,4 @@ SpacesInParentheses: false
 SpacesInSquareBrackets: false
 UseTab: Never
 NamespaceIndentation: All #intend content of namespace
+IndentPPDirectives: BeforeHash
