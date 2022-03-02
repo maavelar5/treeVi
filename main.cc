@@ -800,100 +800,104 @@ struct Shader
     }
 };
 
-struct G_Node
+namespace graphics
 {
-    Vec2    pos;
-    char    str[20];
-    G_Node *left, *right;
-};
+    Vec2 NODE_SIZE = { 16.f, 16.f };
 
-Array<G_Node> nodes;
-
-G_Node* graphical_nodes (Tree<float>::Node* node, float x = 0, float y = 0)
-{
-    if (!node) return nullptr;
-
-    float l_height = Tree<float>::height (node->left, 1) * 3;
-
-    Vec2 pos = { x + l_height + 1, y };
-
-    G_Node* g_node = &nodes.push ({ pos * 16.f, {}, nullptr, nullptr });
-
-    sprintf (g_node->str, "%0.f", node->data);
-
-    g_node->left  = graphical_nodes (node->left, x, y + 2);
-    g_node->right = graphical_nodes (node->right, pos.x + 1, y + 2);
-
-    return g_node;
-}
-
-Array<kv<char, Texture> > charset;
-
-TTF_Font* font = nullptr;
-
-Texture get_char (char c)
-{
-    for (size_t i = 0; i < charset.length; i++)
-        if (charset[i].key == c) return charset[i].val;
-
-    const char text[2] = { c, '\0' };
-
-    SDL_Surface* surface = TTF_RenderText_Solid (font, text, { 255, 255, 200 });
-
-    return charset.push ({ c, Texture (surface) }).val;
-}
-
-void print_line (Shader shader, G_Node* a, G_Node* b, Vec2 height = { 16, 16 })
-{
-    if (!b) return;
-
-    Vec2 diff = (a->pos - b->pos) / 2.f;
-    Vec2 line = {
-        b->pos.x + ((strlen (b->str) * height.x) / 2.f),
-        b->pos.y + (diff.y + (height.y / 2.f)),
+    struct Node
+    {
+        Vec2  pos;
+        char  str[20];
+        Node *left, *right;
     };
 
-    float angle = a->pos.angle (line);
+    TTF_Font*   font = nullptr;
+    Array<Node> nodes;
 
-    shader.set ("u_type", 0);
-    shader.set ("u_alpha", 1.f);
-    shader.set ("u_color", { 0, .4, 1 });
+    Array<kv<char, Texture> > charset;
 
-    shader.set ("u_model", get_model (line, { diff.x * 2, 2 }, angle));
-    glDrawArrays (GL_TRIANGLES, 0, 6);
-}
-
-void print (Shader shader, G_Node* a, Vec2 height = { 16, 16 })
-{
-    if (!a) return;
-
-    print_line (shader, a, a->left);
-    print_line (shader, a, a->right);
-
-    shader.set ("u_type", 0);
-    shader.set ("u_color", { 0.8f, .2f, 0.f });
-    shader.set ("u_alpha", 1.f);
-
-    Vec2 pos        = a->pos;
-    Vec2 block_size = { strlen (a->str) * height.x, height.y };
-
-    shader.set ("u_model", get_model (pos, block_size, 0));
-    glDrawArrays (GL_TRIANGLES, 0, 6);
-
-#if 1
-    shader.set ("u_type", 2);
-
-    for (size_t j = 0; j < strlen (a->str); j++)
+    Node* update_nodes (Tree<float>::Node* t_node, Vec2 curr = { 0, 0 })
     {
-        Texture t = get_char (a->str[j]);
+        if (!t_node) return nullptr;
 
-        glBindTexture (GL_TEXTURE_2D, t.id);
+        float l_height = Tree<float>::height (t_node->left, 1) * 3;
 
-        shader.set ("u_model", get_model (pos, { height.x, 16 }, 0));
+        Vec2 pos = { curr.x + l_height + 1, curr.y };
+
+        Node* node = &nodes.push ({ pos * NODE_SIZE, {}, nullptr, nullptr });
+
+        sprintf (node->str, "%0.f", t_node->data);
+
+        node->left  = update_nodes (t_node->left, { curr.x, curr.y + 2 });
+        node->right = update_nodes (t_node->right, { pos.x + 1, curr.y + 2 });
+
+        return node;
+    }
+
+    Texture get_char (char c)
+    {
+        for (size_t i = 0; i < charset.length; i++)
+            if (charset[i].key == c) return charset[i].val;
+
+        const char text[2] = { c, '\0' };
+
+        SDL_Surface* surface
+            = TTF_RenderText_Solid (font, text, { 255, 255, 200 });
+
+        return charset.push ({ c, Texture (surface) }).val;
+    }
+
+    void draw_line (Shader shader, Node* a, Node* b, Vec2 height = { 16, 16 })
+    {
+        if (!b) return;
+
+        Vec2 diff = (a->pos - b->pos) / 2.f;
+        Vec2 line = {
+            b->pos.x + ((strlen (b->str) * height.x) / 2.f),
+            b->pos.y + (diff.y + (height.y / 2.f)),
+        };
+
+        float angle = a->pos.angle (line);
+
+        shader.set ("u_type", 0);
+        shader.set ("u_alpha", 1.f);
+        shader.set ("u_color", { 0, .4, 1 });
+
+        shader.set ("u_model", get_model (line, { diff.x * 2, 2 }, angle));
+        glDrawArrays (GL_TRIANGLES, 0, 6);
+    }
+
+    void draw (Shader shader, Node* a)
+    {
+        if (!a) return;
+
+        draw_line (shader, a, a->left);
+        draw_line (shader, a, a->right);
+
+        shader.set ("u_type", 0);
+        shader.set ("u_color", { 0.8f, .2f, 0.f });
+        shader.set ("u_alpha", 1.f);
+
+        Vec2 pos        = a->pos;
+        Vec2 block_size = { strlen (a->str) * NODE_SIZE.x, NODE_SIZE.y };
+
+        shader.set ("u_model", get_model (pos, block_size, 0));
         glDrawArrays (GL_TRIANGLES, 0, 6);
 
-        pos.x += height.x;
-    }
+#if 1
+        shader.set ("u_type", 2);
+
+        for (size_t j = 0; j < strlen (a->str); j++)
+        {
+            Texture t = get_char (a->str[j]);
+
+            glBindTexture (GL_TEXTURE_2D, t.id);
+
+            shader.set ("u_model", get_model (pos, NODE_SIZE, 0));
+            glDrawArrays (GL_TRIANGLES, 0, 6);
+
+            pos.x += NODE_SIZE.x;
+        }
 #endif
 
 #if 0
@@ -922,8 +926,10 @@ void print (Shader shader, G_Node* a, Vec2 height = { 16, 16 })
     }
 #endif
 
-    print (shader, a->left);
-    print (shader, a->right);
+        draw (shader, a->left);
+        draw (shader, a->right);
+    }
+
 }
 
 int main (int argc, char** argv)
@@ -955,10 +961,10 @@ int main (int argc, char** argv)
     glEnable (GL_BLEND);
     glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    font = TTF_OpenFont (
+    graphics::font = TTF_OpenFont (
         "/usr/share/fonts/liberation/LiberationMono-Regular.ttf", 14);
 
-    if (!font) printf ("font: %s\n", SDL_GetError ());
+    if (!graphics::font) printf ("font: %s\n", SDL_GetError ());
 
     Tree<float> tree
         = { 5,  3,  2,  4,    7,  6,  8,  15, 10, 9,   11,  16,  15.5, 13, -1,
@@ -968,11 +974,9 @@ int main (int argc, char** argv)
 
     Shader shader ("vertex.glsl", "fragment.glsl");
 
-    Vec2 height = { 16, 16 };
-
     int fw, fh;
 
-    TTF_SizeText (font, "a", &fw, &fh);
+    TTF_SizeText (graphics::font, "a", &fw, &fh);
 
     Vec2 mouse;
 
@@ -1000,10 +1004,10 @@ int main (int argc, char** argv)
         shader.use ();
         glBindTexture (GL_TEXTURE0, spritesheet.id);
 
-        graphical_nodes (tree.root, 0, 1);
-        print (shader, &nodes[0], height);
+        graphics::update_nodes (tree.root, { 0, 1 });
+        graphics::draw (shader, &graphics::nodes[0]);
 
-        nodes.length = 0;
+        graphics::nodes.length = 0;
 
         SDL_GL_SwapWindow (window);
     }
